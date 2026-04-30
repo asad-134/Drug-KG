@@ -1,0 +1,16 @@
+# Environments
+.venv/
+__pycache__/
+*.pyc
+
+# Private Keys
+.env
+
+# Data and Large Outputs
+neo4j_lite_data/
+drug-labels/
+outputs/
+plugins/*.jar
+
+# System files
+.DS_Store
