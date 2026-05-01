@@ -11,7 +11,6 @@ neo4j_lite_data/
 drug-labels/
 outputs/
 plugins/*.jar
-scripts/import_lite.py
 STREAMLIT_DEPLOYMENT_PLAN.md
 # System files
 .DS_Store
