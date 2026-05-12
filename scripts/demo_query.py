@@ -11,8 +11,7 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from phase3.llm_chain import build_graph_chain
-from phase3.safety import validate_response
+from phase3.qa import build_qa_resources, run_verified_query
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a single QA query using GraphCypherQAChain")
@@ -27,12 +26,11 @@ def main():
         raise SystemExit("OPENROUTER_API_KEY is required in .env")
 
     args = parse_args()
-    chain = build_graph_chain(PROJECT_ROOT)
-    response = chain.invoke({"query": args.question})
-    text = response.get("result", "") if isinstance(response, dict) else str(response)
-
-    safety = validate_response(text)
-    print(safety.sanitized_text)
+    resources = build_qa_resources(PROJECT_ROOT)
+    answer, resolution = run_verified_query(args.question, resources)
+    if resolution.used:
+        print(f"Resolved '{resolution.matched_phrase}' to '{resolution.matched_name}'.")
+    print(answer)
 
 if __name__ == "__main__":
     main()

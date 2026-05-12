@@ -14,13 +14,12 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from phase3.llm_chain import build_graph_chain
-from phase3.safety import validate_response
+from phase3.qa import build_qa_resources, run_verified_query
 
 
 @st.cache_resource
-def get_chain():
-    return build_graph_chain(PROJECT_ROOT)
+def get_resources():
+    return build_qa_resources(PROJECT_ROOT)
 
 
 def main() -> None:
@@ -30,34 +29,13 @@ def main() -> None:
         "Educational use only. This tool does not provide medical advice, diagnosis, or treatment."
     )
 
-    preset_questions = [
-        "What is gabapentin used for?",
-        "Does gabapentin interact with morphine?",
-        "What are the serious warnings for varenicline?",
-        "What drugs interact with warfarin?",
-        "Does varenicline interact with alcohol?",
-        "Can children take gabapentin?",
-        "What is the half-life of gabapentin?",
-        "Does glimepiride cause hypoglycemia?",
-        "What is varenicline's mechanism of action?",
-    ]
-
-    st.subheader("Quick queries")
-    selected_preset = None
-    cols = st.columns(2)
-    for idx, preset in enumerate(preset_questions):
-        col = cols[idx % 2]
-        if col.button(preset, use_container_width=True):
-            selected_preset = preset
-
     question = st.text_input(
         "Ask a question",
         placeholder="What drugs treat hypertension?",
-        value=selected_preset or "",
     )
     submit = st.button("Run query", type="primary", use_container_width=True)
 
-    if submit or selected_preset:
+    if submit:
         if not question.strip():
             st.warning("Please enter a question.")
             return
@@ -68,11 +46,13 @@ def main() -> None:
 
         with st.spinner("Querying the graph and generating response..."):
             try:
-                chain = get_chain()
-                response = chain.invoke({"query": question})
-                text = response.get("result", "") if isinstance(response, dict) else str(response)
-                safety = validate_response(text)
-                st.markdown(safety.sanitized_text)
+                resources = get_resources()
+                answer, resolution = run_verified_query(question, resources)
+                if resolution.used:
+                    st.caption(
+                        f"Resolved '{resolution.matched_phrase}' to '{resolution.matched_name}'."
+                    )
+                st.markdown(answer)
             except Exception as exc:
                 st.error(f"Request failed: {exc}")
 

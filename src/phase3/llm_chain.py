@@ -30,15 +30,27 @@ def load_graph_qa_config(project_root: Path) -> GraphQAConfig:
     )
 
 
-def build_graph_chain(project_root: Path) -> GraphCypherQAChain:
+def build_graph(project_root: Path) -> Neo4jGraph:
     cfg = load_graph_qa_config(project_root)
-
-    graph = Neo4jGraph(
+    return Neo4jGraph(
         url=cfg.neo4j_uri,
         username=cfg.neo4j_user,
         password=cfg.neo4j_password,
     )
 
+
+def build_llm(cfg: GraphQAConfig, *, model_override: str | None = None, max_tokens: int = 800) -> ChatOpenAI:
+    return ChatOpenAI(
+        api_key=cfg.openrouter_api_key,
+        base_url=cfg.openrouter_base_url,
+        model=model_override or cfg.openrouter_model,
+        temperature=0.0,
+        max_tokens=max_tokens,
+        default_headers={"HTTP-Referer": "local", "X-Title": "OpenFDA-DDKG"},
+    )
+
+
+def build_cypher_prompt() -> PromptTemplate:
     cypher_prompt_text = (
         "You are an expert Neo4j Cypher generator.\n"
         "Given the graph schema and a user question, write a Cypher query that answers the question.\n"
@@ -48,28 +60,29 @@ def build_graph_chain(project_root: Path) -> GraphCypherQAChain:
         "For yes/no questions, do NOT use EXISTS() without a pattern. Use a count-based boolean,\n"
         "for example: MATCH (a:Drug)-[:INTERACTS_WITH]->(b:Drug)\n"
         "RETURN count(*) > 0 AS has_interaction.\n"
+        "Avoid APOC and other procedures.\n"
+        "Prefer returning a small list (use LIMIT 25 unless the question requests otherwise).\n"
         "Return only the Cypher query, with no explanations or formatting.\n\n"
         "Schema:\n{schema}\n\n"
         "Question:\n{question}\n"
     )
-    CYPHER_GENERATION_PROMPT = PromptTemplate(
+    return PromptTemplate(
         input_variables=["schema", "question"],
         template=cypher_prompt_text,
     )
 
-    llm = ChatOpenAI(
-        api_key=cfg.openrouter_api_key,
-        base_url=cfg.openrouter_base_url,
-        model=cfg.openrouter_model,
-        temperature=0.0,
-        max_tokens=800,
-        default_headers={"HTTP-Referer": "local", "X-Title": "OpenFDA-DDKG"},
-    )
+
+def build_graph_chain(project_root: Path) -> GraphCypherQAChain:
+    cfg = load_graph_qa_config(project_root)
+    graph = build_graph(project_root)
+    llm = build_llm(cfg)
+    cypher_prompt = build_cypher_prompt()
 
     return GraphCypherQAChain.from_llm(
         llm,
         graph=graph,
-        cypher_prompt=CYPHER_GENERATION_PROMPT,
+        cypher_prompt=cypher_prompt,
         verbose=True,
-        allow_dangerous_requests=True # Required in newer LangChain versions
+        allow_dangerous_requests=True, # Required in newer LangChain versions
+        return_intermediate_steps=True,
     )
